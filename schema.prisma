@@ -1,0 +1,395 @@
+// Prisma Schema for SDX Software Development
+// Database: PostgreSQL with Prisma ORM
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  ADMIN
+  CLIENT
+}
+
+enum ProjectStatus {
+  PLANNING
+  IN_PROGRESS
+  REVIEW
+  COMPLETED
+  ON_HOLD
+}
+
+enum MilestoneStatus {
+  PENDING
+  IN_PROGRESS
+  COMPLETED
+}
+
+enum PaymentStatus {
+  PENDING
+  PAID
+  FAILED
+  REFUNDED
+}
+
+enum InvoiceStatus {
+  UNPAID
+  PAID
+  OVERDUE
+  CANCELLED
+}
+
+enum AgreementStatus {
+  DRAFT
+  SENT
+  SIGNED
+  EXPIRED
+}
+
+enum NotificationType {
+  INFO
+  SUCCESS
+  WARNING
+  PAYMENT
+  PROJECT
+}
+
+model User {
+  id           String         @id @default(cuid())
+  email        String         @unique
+  passwordHash String
+  name         String
+  role         Role           @default(CLIENT)
+  phone        String?
+  company      String?
+  avatar       String?
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+
+  clientProfile ClientProfile?
+  projects      Project[]
+  orders        Order[]
+  invoices      Invoice[]
+  notifications Notification[]
+  activityLogs  AdminActivityLog[]
+  uploadedFiles UploadedFile[]
+  agreements    Agreement[]
+
+  @@index([email])
+  @@index([role])
+}
+
+model ClientProfile {
+  id          String   @id @default(cuid())
+  userId      String   @unique
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  companyName String?
+  address     String?
+  city        String?
+  state       String?
+  pincode     String?
+  gstNumber   String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model Project {
+  id          String             @id @default(cuid())
+  title       String
+  slug        String             @unique
+  category    String
+  description String
+  status      ProjectStatus      @default(PLANNING)
+  progress    Int                @default(0)
+  budget      Float              @default(0)
+  paidAmount  Float              @default(0)
+  clientId    String
+  client      User               @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  startDate   DateTime?
+  endDate     DateTime?
+  liveUrl     String?
+  githubUrl   String?
+  createdAt   DateTime           @default(now())
+  updatedAt   DateTime           @updatedAt
+
+  milestones  ProjectMilestone[]
+  invoices    Invoice[]
+  files       UploadedFile[]
+  agreements  Agreement[]
+
+  @@index([clientId])
+  @@index([status])
+}
+
+model ProjectMilestone {
+  id            String          @id @default(cuid())
+  projectId     String
+  project       Project         @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  title         String
+  description   String?
+  status        MilestoneStatus @default(PENDING)
+  dueDate       DateTime?
+  completedDate DateTime?
+  createdAt     DateTime        @default(now())
+
+  @@index([projectId])
+}
+
+model Service {
+  id            String   @id @default(cuid())
+  title         String
+  slug          String   @unique
+  shortDesc     String
+  fullDesc      String
+  features      String[] // Array of feature bullet points
+  price         Float
+  priceDisplay  String   // e.g. "₹2,999"
+  icon          String   // Lucide icon name
+  isPopular     Boolean  @default(false)
+  displayOrder  Int      @default(0)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
+model PortfolioProject {
+  id          String   @id @default(cuid())
+  title       String
+  slug        String   @unique
+  category    String
+  clientName  String?
+  image       String
+  liveUrl     String?
+  caseStudy   String?
+  techStack   String[]
+  beforeImage String?
+  afterImage  String?
+  isFeatured  Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([category])
+}
+
+model BlogCategory {
+  id          String     @id @default(cuid())
+  name        String     @unique
+  slug        String     @unique
+  description String?
+  posts       BlogPost[]
+}
+
+model BlogPost {
+  id          String        @id @default(cuid())
+  title       String
+  slug        String        @unique
+  excerpt     String
+  content     String
+  coverImage  String
+  author      String        @default("SASIDHAR")
+  tags        String[]
+  categoryId  String?
+  category    BlogCategory? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  isPublished Boolean       @default(true)
+  publishedAt DateTime?     @default(now())
+  scheduledAt DateTime?
+  seoTitle    String?
+  seoDesc     String?
+  readingTime String?       @default("5 min read")
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  @@index([slug])
+  @@index([isPublished])
+}
+
+model PricingPlan {
+  id            String   @id @default(cuid())
+  name          String   @unique
+  slug          String   @unique
+  price         Float
+  priceDisplay  String   // e.g. "₹999"
+  billingPeriod String   @default("One-Time")
+  isPopular     Boolean  @default(false)
+  description   String
+  features      String[]
+  category      String
+  ctaText       String   @default("Get Started")
+  displayOrder  Int      @default(0)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
+model ContactMessage {
+  id          String   @id @default(cuid())
+  name        String
+  email       String
+  phone       String
+  company     String?
+  subject     String
+  message     String
+  isRead      Boolean  @default(false)
+  replyStatus String   @default("PENDING") // PENDING, REPLIED
+  ipAddress   String?
+  createdAt   DateTime @default(now())
+
+  @@index([isRead])
+  @@index([createdAt])
+}
+
+model Order {
+  id               String        @id @default(cuid())
+  orderNumber      String        @unique
+  clientId         String?
+  client           User?         @relation(fields: [clientId], references: [id], onDelete: SetNull)
+  clientName       String
+  clientEmail      String
+  clientPhone      String?
+  planName         String
+  amount           Float
+  currency         String        @default("INR")
+  status           PaymentStatus @default(PENDING)
+  razorpayOrderId  String?       @unique
+  razorpayPaymentId String?
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+
+  payments Payment[]
+
+  @@index([orderNumber])
+  @@index([status])
+}
+
+model Payment {
+  id                String        @id @default(cuid())
+  orderId           String
+  order             Order         @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  amount            Float
+  currency          String        @default("INR")
+  status            PaymentStatus @default(PENDING)
+  method            String?
+  razorpayPaymentId String?       @unique
+  razorpaySignature String?
+  receiptUrl        String?
+  createdAt         DateTime      @default(now())
+
+  @@index([orderId])
+}
+
+model Invoice {
+  id            String        @id @default(cuid())
+  invoiceNumber String        @unique
+  clientId      String
+  client        User          @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  projectId     String?
+  project       Project?      @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  issueDate     DateTime      @default(now())
+  dueDate       DateTime
+  subtotal      Float
+  tax           Float         @default(0)
+  total         Float
+  status        InvoiceStatus @default(UNPAID)
+  itemsJson     String        // JSON string of line items [{ description, qty, rate, amount }]
+  notes         String?
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  @@index([invoiceNumber])
+  @@index([clientId])
+}
+
+model UploadedFile {
+  id          String   @id @default(cuid())
+  fileName    String
+  fileKey     String   @unique
+  fileUrl     String
+  fileSize    Int
+  fileType    String
+  isProtected Boolean  @default(true)
+  clientId    String?
+  client      User?    @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  projectId   String?
+  project     Project? @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  uploadedBy  String?
+  createdAt   DateTime @default(now())
+
+  @@index([clientId])
+  @@index([projectId])
+}
+
+model Agreement {
+  id              String          @id @default(cuid())
+  title           String
+  agreementNumber String          @unique
+  clientId        String
+  client          User            @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  projectId       String?
+  project         Project?        @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  fileUrl         String?
+  content         String?
+  status          AgreementStatus @default(DRAFT)
+  signedAt        DateTime?
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+
+  @@index([clientId])
+}
+
+model Notification {
+  id        String           @id @default(cuid())
+  userId    String
+  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title     String
+  message   String
+  type      NotificationType @default(INFO)
+  isRead    Boolean          @default(false)
+  link      String?
+  createdAt DateTime         @default(now())
+
+  @@index([userId])
+  @@index([isRead])
+}
+
+model AnalyticsStat {
+  id               String   @id @default(cuid())
+  date             DateTime @unique @default(now())
+  pageViews        Int      @default(0)
+  uniqueVisitors   Int      @default(0)
+  contactInquiries Int      @default(0)
+  ordersPlaced     Int      @default(0)
+  revenue          Float    @default(0)
+}
+
+model RevenueTarget {
+  id             String   @id @default(cuid())
+  month          Int
+  year           Int
+  targetMin      Float    @default(50000)
+  targetMax      Float    @default(100000)
+  achievedAmount Float    @default(0)
+  landingCount   Int      @default(0) // target: 10 × ₹999
+  businessCount  Int      @default(0) // target: 10 × ₹2999
+  portfolioCount Int      @default(0) // target: 5 × ₹2499
+  ecommerceCount Int      @default(0) // target: 2 × ₹9999
+  updatedAt      DateTime @updatedAt
+
+  @@unique([month, year])
+}
+
+model AdminActivityLog {
+  id        String   @id @default(cuid())
+  adminId   String
+  admin     User     @relation(fields: [adminId], references: [id], onDelete: Cascade)
+  action    String
+  entity    String
+  entityId  String?
+  details   String?
+  ipAddress String?
+  createdAt DateTime @default(now())
+
+  @@index([adminId])
+  @@index([createdAt])
+}
